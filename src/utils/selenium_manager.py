@@ -200,30 +200,18 @@ class SeleniumManager:
             True если страница загружена, False если превышен таймаут
         """
         if timeout is None:
-            timeout = Settings.PAGE_LOAD_TIMEOUT
+            timeout = 10  # Сокращаем таймаут для быстрого fallback на Playwright
 
-        start_time = time.time()
-        retry_count = 0
-        max_retries = Settings.MAX_RETRIES
+        # Ждем загрузки
+        time.sleep(3)
 
-        while time.time() - start_time < timeout:
-            if self.is_page_blocked():
-                retry_count += 1
-                if retry_count > max_retries:
-                    logger.error("Превышено количество попыток обхода блокировки")
-                    return False
+        # Проверяем блокировку один раз
+        if self.is_page_blocked():
+            logger.warning("Обнаружена блокировка - требуется переключение на Playwright")
+            return False
 
-                logger.warning(f"Обнаружена блокировка, попытка {retry_count}/{max_retries}")
-                self.driver.refresh()
-                time.sleep(Settings.RETRY_DELAY)
-            else:
-                logger.info("Страница загружена успешно")
-                return True
-
-            time.sleep(2)
-
-        logger.error(f"Превышен таймаут ожидания загрузки страницы ({timeout}с)")
-        return False
+        logger.info("Страница загружена успешно")
+        return True
 
     def is_page_blocked(self) -> bool:
         """
@@ -238,7 +226,7 @@ class SeleniumManager:
         try:
             page_source = self.driver.page_source.lower()
 
-            # Индикаторы блокировки
+            # Индикаторы блокировки (более специфичные паттерны)
             block_patterns = [
                 "cloudflare",
                 "ddos-guard",
@@ -248,8 +236,11 @@ class SeleniumManager:
                 "just a moment",
                 "captcha",
                 "подтвердите, что вы не робот",
-                "robot",
+                "are you a robot",
+                "verify you are human",
                 "bot detected",
+                "security check",
+                "проверка безопасности",
             ]
 
             for pattern in block_patterns:
