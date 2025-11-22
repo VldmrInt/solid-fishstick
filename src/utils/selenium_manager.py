@@ -103,8 +103,8 @@ class SeleniumManager:
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(f"--user-agent={Settings.USER_AGENT}")
 
-        # Экспериментальные опции
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # Экспериментальные опции (объединяем excludeSwitches в одну опцию)
+        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_experimental_option("prefs", {
             "profile.default_content_setting_values.notifications": 2
@@ -112,7 +112,6 @@ class SeleniumManager:
 
         # Отключение логов
         options.add_argument("--log-level=3")
-        options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
         return options
 
