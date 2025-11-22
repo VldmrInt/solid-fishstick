@@ -11,6 +11,7 @@ from datetime import datetime
 
 from src.config.settings import Settings
 from src.parsers.api_parser import OzonAPIParser
+from src.parsers.html_parser import OzonHTMLParser
 from src.utils.exporter import DataExporter
 from src.utils.logger import setup_logger
 
@@ -20,7 +21,7 @@ logger = setup_logger('ozon_parser')
 def main():
     """Главная функция программы"""
     parser = argparse.ArgumentParser(
-        description='Ozon Product Parser - парсинг товаров магазина через API'
+        description='Ozon Product Parser - парсинг товаров магазина'
     )
     parser.add_argument(
         '--url',
@@ -32,6 +33,25 @@ def main():
         type=int,
         default=100,
         help='Максимальное количество страниц для парсинга (по умолчанию: 100)'
+    )
+    parser.add_argument(
+        '--method',
+        type=str,
+        choices=['api', 'html'],
+        default='html',
+        help='Метод парсинга: api (через API endpoints) или html (прямой HTML, рекомендуется) (по умолчанию: html)'
+    )
+    parser.add_argument(
+        '--headless',
+        action='store_true',
+        default=True,
+        help='Запускать браузер в headless режиме (по умолчанию: True)'
+    )
+    parser.add_argument(
+        '--no-headless',
+        dest='headless',
+        action='store_false',
+        help='Открыть видимое окно браузера (помогает обойти защиту)'
     )
     parser.add_argument(
         '--format',
@@ -71,13 +91,19 @@ def main():
             logger.warning("Не удалось извлечь ID продавца из URL")
             seller_id = "unknown"
 
-        # Инициализация парсера
+        # Инициализация парсера в зависимости от выбранного метода
         logger.info(f"Инициализация парсера для продавца ID: {seller_id}")
-        api_parser = OzonAPIParser(seller_url)
+        logger.info(f"Метод парсинга: {args.method.upper()}")
+
+        if args.method == 'html':
+            logger.info(f"Режим браузера: {'headless' if args.headless else 'с видимым окном'}")
+            parser = OzonHTMLParser(seller_url, headless=args.headless)
+        else:  # api
+            parser = OzonAPIParser(seller_url)
 
         # Парсинг товаров
         logger.info(f"Начало парсинга (максимум {args.max_pages} страниц)...")
-        products = api_parser.parse_all_pages(max_pages=args.max_pages)
+        products = parser.parse_all_pages(max_pages=args.max_pages)
 
         if not products:
             logger.warning("Не найдено ни одного товара!")
