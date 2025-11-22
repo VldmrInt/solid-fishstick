@@ -18,9 +18,13 @@ class Settings:
     OUTPUT_DIR = PROJECT_ROOT / 'output'
     LOG_FILE = PROJECT_ROOT / 'parser.log'
 
-    # API Ozon
-    # Используем мобильный API endpoint для обхода CloudFlare
-    OZON_API_BASE = "https://api.ozon.ru/composer-api.bx/page/json/v2"
+    # API Ozon - используем два варианта для надежности
+    # Мобильный API endpoint (приоритет) - лучше обходит CloudFlare
+    OZON_API_BASE_MOBILE = "https://api.ozon.ru/composer-api.bx/page/json/v2"
+    # Desktop API endpoint (fallback) - работает при проблемах с DNS
+    OZON_API_BASE_DESKTOP = "https://www.ozon.ru/api/entrypoint-api.bx/page/json/v2"
+    # Текущий активный endpoint (может меняться во время работы)
+    OZON_API_BASE = OZON_API_BASE_MOBILE
     OZON_BASE_URL = "https://www.ozon.ru"
 
     # Параметры Chrome
@@ -45,7 +49,7 @@ class Settings:
     MAX_WORKERS = 3
 
     # Логирование
-    LOG_LEVEL = 'INFO'
+    LOG_LEVEL = 'DEBUG'  # Временно включаем DEBUG для диагностики
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 

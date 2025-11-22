@@ -95,11 +95,15 @@ class SeleniumManager:
         if headless:
             options.add_argument("--headless=new")
 
+        # Флаги для стабильности
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-extensions")
+        # Не используем --single-process так как это вызывает ERR_TUNNEL_CONNECTION_FAILED
+
         # Используем мобильный User-Agent для обхода CloudFlare
         options.add_argument(f"--user-agent={Settings.USER_AGENT_MOBILE}")
         options.add_argument("--log-level=3")

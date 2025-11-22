@@ -1,5 +1,6 @@
 # Selenium и Chrome driver
 selenium==4.15.2
+# Undetected-chromedriver - для обхода защиты Ozon (рекомендуется для HTML метода)
 undetected-chromedriver>=3.5.4
 selenium-stealth==1.0.6
 
