@@ -27,15 +27,15 @@ class Settings:
     USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
     # Таймауты (в секундах)
-    PAGE_LOAD_TIMEOUT = 30
-    API_REQUEST_TIMEOUT = 20
-    ANTI_BOT_WAIT_TIMEOUT = 60
-    RETRY_DELAY = 5
+    PAGE_LOAD_TIMEOUT = 60  # Увеличен для обхода анти-бот защиты
+    API_REQUEST_TIMEOUT = 45  # Увеличен для медленных ответов
+    ANTI_BOT_WAIT_TIMEOUT = 120  # Увеличен для сложных проверок
+    RETRY_DELAY = 10  # Увеличен для снижения подозрений
 
     # Параметры парсинга
-    MAX_RETRIES = 3
-    REQUEST_DELAY_MIN = 2
-    REQUEST_DELAY_MAX = 5
+    MAX_RETRIES = 5  # Увеличено количество повторов
+    REQUEST_DELAY_MIN = 5  # Увеличена минимальная задержка между запросами
+    REQUEST_DELAY_MAX = 10  # Увеличена максимальная задержка
 
     # Параметры многопоточности
     MAX_WORKERS = 3
