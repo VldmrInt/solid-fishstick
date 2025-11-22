@@ -1,9 +1,16 @@
 # Selenium и Chrome driver
-selenium>=4.15.0
+selenium==4.15.2
 undetected-chromedriver>=3.5.4
+selenium-stealth==1.0.6
 
 # HTML parsing
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Excel export
+openpyxl==3.1.5
+
+# HTTP requests
+requests==2.31.0
 
 # Utilities
