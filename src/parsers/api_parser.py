@@ -8,6 +8,7 @@ import logging
 import random
 from typing import List, Dict, Optional
 from dataclasses import dataclass, asdict
+from urllib.parse import quote
 
 from src.config.settings import Settings
 from src.utils.selenium_manager import SeleniumManager
@@ -82,23 +83,26 @@ class OzonAPIParser:
         logger.info(f"ID продавца: {self.seller_id}")
 
         try:
-            # Пытаемся использовать Selenium
-            try:
-                self.selenium_manager.create_driver(headless=True)
-                logger.info("WebDriver (Selenium) инициализирован")
-                self.use_playwright = False
-            except Exception as e:
-                logger.warning(f"Не удалось инициализировать Selenium: {e}")
-
-                # Fallback на Playwright
-                if HAS_PLAYWRIGHT and self.playwright_manager:
-                    logger.info("Переключаемся на Playwright...")
+            # Для мобильного API приоритетнее использовать Playwright
+            if HAS_PLAYWRIGHT and self.playwright_manager:
+                try:
+                    logger.info("Инициализация Playwright (приоритет для mobile API)...")
                     self.playwright_manager.create_browser(headless=True)
                     logger.info("Playwright инициализирован")
                     self.use_playwright = True
-                else:
-                    logger.error("Playwright недоступен. Установите: pip install playwright && playwright install chromium")
-                    raise
+                except Exception as e:
+                    logger.warning(f"Не удалось инициализировать Playwright: {e}")
+                    # Fallback на Selenium
+                    logger.info("Переключаемся на Selenium как fallback...")
+                    self.selenium_manager.create_driver(headless=True)
+                    logger.info("WebDriver (Selenium) инициализирован")
+                    self.use_playwright = False
+            else:
+                # Playwright недоступен, используем Selenium
+                logger.info("Playwright недоступен, используем Selenium...")
+                self.selenium_manager.create_driver(headless=True)
+                logger.info("WebDriver (Selenium) инициализирован")
+                self.use_playwright = False
 
             page_num = 1
             empty_pages_count = 0
@@ -254,9 +258,11 @@ class OzonAPIParser:
             else:
                 seller_path += f'?page={page_num}'
 
-        # Формируем полный API URL
-        api_url = f"{Settings.OZON_API_BASE}?url={seller_path}&__rr=1"
+        # Формируем полный API URL с URL-encoding параметра url
+        encoded_path = quote(seller_path, safe='')
+        api_url = f"{Settings.OZON_API_BASE}?url={encoded_path}&__rr=1"
 
+        logger.debug(f"Seller path: {seller_path}")
         logger.debug(f"API URL: {api_url}")
         return api_url
 

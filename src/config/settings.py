@@ -45,7 +45,7 @@ class Settings:
     MAX_WORKERS = 3
 
     # Логирование
-    LOG_LEVEL = 'INFO'
+    LOG_LEVEL = 'DEBUG'  # Временно включаем DEBUG для диагностики
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
