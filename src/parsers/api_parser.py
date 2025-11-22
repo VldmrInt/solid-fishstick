@@ -354,23 +354,39 @@ class OzonAPIParser:
             # Вариант 1: объект price
             price_info = item.get('price', {})
             if isinstance(price_info, dict):
-                # Пробуем разные поля для текущей цены
-                current_price = (
-                    price_info.get('text') or
-                    price_info.get('price') or
-                    price_info.get('current') or
-                    price_info.get('finalPrice') or
-                    price_info.get('displayPrice') or
-                    ''
-                )
+                # НОВАЯ СТРУКТУРА: price.price[0].text
+                price_array = price_info.get('price')
+                if isinstance(price_array, list) and len(price_array) > 0:
+                    # Извлекаем текст цены из первого элемента массива
+                    price_obj = price_array[0]
+                    if isinstance(price_obj, dict):
+                        current_price = price_obj.get('text', '')
+
+                    # Старая цена может быть во втором элементе или отдельном поле
+                    if len(price_array) > 1:
+                        old_price_obj = price_array[1]
+                        if isinstance(old_price_obj, dict):
+                            original_price = old_price_obj.get('text', '')
+
+                # Если не нашли через массив, пробуем старые варианты
+                if not current_price:
+                    # Пробуем разные поля для текущей цены
+                    current_price = (
+                        price_info.get('text') or
+                        price_info.get('current') or
+                        price_info.get('finalPrice') or
+                        price_info.get('displayPrice') or
+                        ''
+                    )
 
                 # Пробуем разные поля для старой цены
-                original_price = (
-                    price_info.get('originalPrice') or
-                    price_info.get('original') or
-                    price_info.get('ozonCardPrice') or
-                    ''
-                )
+                if not original_price:
+                    original_price = (
+                        price_info.get('originalPrice') or
+                        price_info.get('original') or
+                        price_info.get('ozonCardPrice') or
+                        ''
+                    )
 
                 # Конвертируем в строку если это число
                 if isinstance(current_price, (int, float)):
