@@ -46,6 +46,8 @@ page_source_*.html
 seller_*.xml
 parse_log.jsonl
 parser.log
+debug_page_*.json
+output/
 
 # Selenium
 chromedriver

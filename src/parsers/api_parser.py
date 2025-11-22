@@ -208,6 +208,17 @@ class OzonAPIParser:
         # Парсим JSON
         try:
             data = json.loads(json_content)
+
+            # Сохраняем пример JSON для отладки (только первая страница)
+            if page_num == 1:
+                debug_file = Settings.PROJECT_ROOT / f'debug_page_{page_num}.json'
+                try:
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Пример JSON сохранен в {debug_file} для отладки")
+                except Exception as e:
+                    logger.debug(f"Не удалось сохранить debug JSON: {e}")
+
             return self._extract_products_from_json(data)
         except json.JSONDecodeError as e:
             logger.error(f"Ошибка парсинга JSON: {e}")
@@ -336,16 +347,54 @@ class OzonAPIParser:
             if link and not link.startswith('http'):
                 link = Settings.OZON_BASE_URL + link
 
-            # Цены
+            # Цены - более глубокий парсинг
             current_price = ''
             original_price = ''
 
+            # Вариант 1: объект price
             price_info = item.get('price', {})
             if isinstance(price_info, dict):
-                current_price = str(price_info.get('price', price_info.get('current', '')))
-                original_price = str(price_info.get('originalPrice', price_info.get('original', '')))
+                # Пробуем разные поля для текущей цены
+                current_price = (
+                    price_info.get('text') or
+                    price_info.get('price') or
+                    price_info.get('current') or
+                    price_info.get('finalPrice') or
+                    price_info.get('displayPrice') or
+                    ''
+                )
+
+                # Пробуем разные поля для старой цены
+                original_price = (
+                    price_info.get('originalPrice') or
+                    price_info.get('original') or
+                    price_info.get('ozonCardPrice') or
+                    ''
+                )
+
+                # Конвертируем в строку если это число
+                if isinstance(current_price, (int, float)):
+                    current_price = f"{current_price} ₽"
+                if isinstance(original_price, (int, float)):
+                    original_price = f"{original_price} ₽"
+
             elif isinstance(price_info, (str, int, float)):
                 current_price = str(price_info)
+                if isinstance(price_info, (int, float)):
+                    current_price = f"{current_price} ₽"
+
+            # Вариант 2: прямые поля в item
+            if not current_price:
+                current_price = item.get('finalPrice', item.get('displayPrice', ''))
+                if isinstance(current_price, (int, float)):
+                    current_price = f"{current_price} ₽"
+
+            # Логируем если цена не найдена
+            if not current_price:
+                logger.debug(f"Цена не найдена для товара {sku}. Доступные ключи: {list(item.keys())[:10]}")
+
+            current_price = str(current_price)
+            original_price = str(original_price)
 
             # Изображение
             image_url = item.get('image', item.get('coverImage', item.get('img', '')))
