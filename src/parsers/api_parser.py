@@ -104,7 +104,7 @@ class OzonAPIParser:
             empty_pages_count = 0
             max_empty_pages = 3
             blocked_count = 0
-            max_blocked = 2
+            max_blocked = 1  # Переключаемся на Playwright сразу при первой блокировке
 
             while page_num <= max_pages:
                 logger.info(f"Парсинг страницы {page_num}/{max_pages}...")
@@ -118,17 +118,25 @@ class OzonAPIParser:
 
                         # Проверяем, не заблокировали ли нас
                         if self._check_if_blocked():
-                            blocked_count += 1
-                            logger.warning(f"Обнаружена блокировка ({blocked_count}/{max_blocked})")
+                            logger.warning(f"Обнаружена блокировка!")
 
-                            # Пытаемся переключиться на Playwright
-                            if not self.use_playwright and HAS_PLAYWRIGHT and blocked_count >= max_blocked:
-                                logger.info("Переключаемся на Playwright из-за блокировок...")
+                            # Немедленно переключаемся на Playwright
+                            if not self.use_playwright and HAS_PLAYWRIGHT and self.playwright_manager:
+                                logger.info("🎭 Переключаемся на Playwright из-за блокировки Selenium...")
                                 self.selenium_manager.close()
-                                self.playwright_manager.create_browser(headless=True)
-                                self.use_playwright = True
-                                blocked_count = 0  # Сбрасываем счетчик
-                                continue  # Пробуем текущую страницу снова
+                                try:
+                                    self.playwright_manager.create_browser(headless=True)
+                                    self.use_playwright = True
+                                    empty_pages_count = 0  # Сбрасываем счетчик пустых страниц
+                                    logger.info("✅ Playwright успешно инициализирован, повторяем страницу")
+                                    continue  # Пробуем текущую страницу снова с Playwright
+                                except Exception as pw_error:
+                                    logger.error(f"Не удалось инициализировать Playwright: {pw_error}")
+                                    break
+                            elif self.use_playwright:
+                                # Уже на Playwright и всё равно блокировка - увеличиваем задержку
+                                logger.warning("⚠️ Блокировка даже на Playwright, увеличиваем задержку...")
+                                time.sleep(20)  # Дополнительная задержка
 
                         if empty_pages_count >= max_empty_pages:
                             logger.info("Достигнуто максимальное количество пустых страниц, завершаем")

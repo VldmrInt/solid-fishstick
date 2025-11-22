@@ -173,7 +173,7 @@ class PlaywrightManager:
         try:
             content = self.page.content().lower()
 
-            # Индикаторы блокировки
+            # Индикаторы блокировки (более специфичные паттерны)
             block_patterns = [
                 "cloudflare",
                 "ddos-guard",
@@ -183,8 +183,11 @@ class PlaywrightManager:
                 "just a moment",
                 "captcha",
                 "подтвердите, что вы не робот",
-                "robot",
+                "are you a robot",
+                "verify you are human",
                 "bot detected",
+                "security check",
+                "проверка безопасности",
             ]
 
             for pattern in block_patterns:
