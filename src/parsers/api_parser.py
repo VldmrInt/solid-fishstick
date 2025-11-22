@@ -66,6 +66,11 @@ class OzonAPIParser:
         self.products: List[ProductInfo] = []
         self.use_playwright = False  # Флаг использования Playwright
 
+        # API endpoint management
+        self.current_api_endpoint = Settings.OZON_API_BASE_MOBILE
+        self.tried_endpoints = []  # Список уже попробованных endpoints
+        self.api_endpoint_failures = 0  # Счетчик ошибок текущего endpoint
+
         if not self.seller_id:
             logger.warning(f"Не удалось извлечь ID продавца из URL: {seller_url}")
 
@@ -81,6 +86,12 @@ class OzonAPIParser:
         """
         logger.info(f"Начало парсинга магазина: {self.seller_url}")
         logger.info(f"ID продавца: {self.seller_id}")
+
+        # Информация о доступных API endpoints
+        logger.info("📡 Доступные API endpoints:")
+        logger.info(f"   1. Mobile API (приоритет):  {Settings.OZON_API_BASE_MOBILE}")
+        logger.info(f"   2. Desktop API (fallback):  {Settings.OZON_API_BASE_DESKTOP}")
+        logger.info(f"   Начинаем с: Mobile API")
 
         try:
             # Для мобильного API приоритетнее использовать Playwright
@@ -119,6 +130,13 @@ class OzonAPIParser:
                     if not page_products:
                         empty_pages_count += 1
                         logger.warning(f"Страница {page_num} пустая ({empty_pages_count}/{max_empty_pages})")
+
+                        # Пробуем переключить API endpoint если еще не пробовали все варианты
+                        if self._should_try_alternative_endpoint():
+                            if self._switch_to_alternative_endpoint():
+                                logger.info(f"🔄 Повторяем страницу {page_num} с новым endpoint")
+                                empty_pages_count = 0  # Сбрасываем счетчик
+                                continue  # Пробуем эту же страницу снова
 
                         # Проверяем, не заблокировали ли нас
                         if self._check_if_blocked():
@@ -201,6 +219,12 @@ class OzonAPIParser:
         # Загружаем страницу
         if not manager.navigate_to_url(api_url, wait_for_load=True):
             logger.error(f"Не удалось загрузить страницу {page_num}")
+            self.api_endpoint_failures += 1
+
+            # Если несколько ошибок подряд - возможно проблема с endpoint
+            if self.api_endpoint_failures >= 2:
+                logger.warning(f"⚠️ Множественные ошибки с текущим API endpoint ({self.api_endpoint_failures} подряд)")
+
             return []
 
         # Извлекаем JSON
@@ -238,6 +262,49 @@ class OzonAPIParser:
         manager = self.playwright_manager if self.use_playwright else self.selenium_manager
         return manager.is_page_blocked()
 
+    def _should_try_alternative_endpoint(self) -> bool:
+        """
+        Проверяет, стоит ли попробовать альтернативный API endpoint.
+
+        Returns:
+            True если есть непроверенные альтернативные endpoints
+        """
+        all_endpoints = [Settings.OZON_API_BASE_MOBILE, Settings.OZON_API_BASE_DESKTOP]
+        untried = [ep for ep in all_endpoints if ep not in self.tried_endpoints]
+        return len(untried) > 0
+
+    def _switch_to_alternative_endpoint(self) -> bool:
+        """
+        Переключается на альтернативный API endpoint.
+
+        Returns:
+            True если переключение успешно, False если нет альтернатив
+        """
+        all_endpoints = [Settings.OZON_API_BASE_MOBILE, Settings.OZON_API_BASE_DESKTOP]
+
+        # Помечаем текущий endpoint как попробованный
+        if self.current_api_endpoint not in self.tried_endpoints:
+            self.tried_endpoints.append(self.current_api_endpoint)
+
+        # Ищем непроверенный endpoint
+        for endpoint in all_endpoints:
+            if endpoint not in self.tried_endpoints:
+                old_endpoint = self.current_api_endpoint
+                self.current_api_endpoint = endpoint
+                self.api_endpoint_failures = 0
+
+                endpoint_name = "Mobile API" if endpoint == Settings.OZON_API_BASE_MOBILE else "Desktop API"
+                old_name = "Mobile API" if old_endpoint == Settings.OZON_API_BASE_MOBILE else "Desktop API"
+
+                logger.warning(f"🔄 Переключаемся с {old_name} на {endpoint_name}")
+                logger.info(f"   Старый: {old_endpoint}")
+                logger.info(f"   Новый:  {endpoint}")
+
+                return True
+
+        logger.error("❌ Все доступные API endpoints уже проверены")
+        return False
+
     def _build_api_url(self, page_num: int) -> str:
         """
         Формирует URL для API Composer.
@@ -259,10 +326,13 @@ class OzonAPIParser:
                 seller_path += f'?page={page_num}'
 
         # Формируем полный API URL с URL-encoding параметра url
+        # Используем текущий активный endpoint
         encoded_path = quote(seller_path, safe='')
-        api_url = f"{Settings.OZON_API_BASE}?url={encoded_path}&__rr=1"
+        api_url = f"{self.current_api_endpoint}?url={encoded_path}&__rr=1"
 
+        endpoint_name = "Mobile" if self.current_api_endpoint == Settings.OZON_API_BASE_MOBILE else "Desktop"
         logger.debug(f"Seller path: {seller_path}")
+        logger.debug(f"API endpoint: {endpoint_name}")
         logger.debug(f"API URL: {api_url}")
         return api_url
 
