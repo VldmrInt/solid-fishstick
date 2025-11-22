@@ -13,4 +13,7 @@ openpyxl==3.1.5
 # HTTP requests
 requests==2.31.0
 
+# Playwright (альтернатива Selenium для обхода блокировок)
+playwright==1.40.0
+
 # Utilities

@@ -12,6 +12,12 @@ from dataclasses import dataclass, asdict
 from src.config.settings import Settings
 from src.utils.selenium_manager import SeleniumManager
 
+try:
+    from src.utils.playwright_manager import PlaywrightManager, HAS_PLAYWRIGHT
+except ImportError:
+    HAS_PLAYWRIGHT = False
+    PlaywrightManager = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +61,9 @@ class OzonAPIParser:
         self.seller_url = seller_url
         self.seller_id = Settings.get_seller_id(seller_url)
         self.selenium_manager = SeleniumManager()
+        self.playwright_manager = PlaywrightManager() if HAS_PLAYWRIGHT else None
         self.products: List[ProductInfo] = []
+        self.use_playwright = False  # Флаг использования Playwright
 
         if not self.seller_id:
             logger.warning(f"Не удалось извлечь ID продавца из URL: {seller_url}")
@@ -74,13 +82,29 @@ class OzonAPIParser:
         logger.info(f"ID продавца: {self.seller_id}")
 
         try:
-            # Создаем WebDriver
-            self.selenium_manager.create_driver(headless=True)
-            logger.info("WebDriver инициализирован")
+            # Пытаемся использовать Selenium
+            try:
+                self.selenium_manager.create_driver(headless=True)
+                logger.info("WebDriver (Selenium) инициализирован")
+                self.use_playwright = False
+            except Exception as e:
+                logger.warning(f"Не удалось инициализировать Selenium: {e}")
+
+                # Fallback на Playwright
+                if HAS_PLAYWRIGHT and self.playwright_manager:
+                    logger.info("Переключаемся на Playwright...")
+                    self.playwright_manager.create_browser(headless=True)
+                    logger.info("Playwright инициализирован")
+                    self.use_playwright = True
+                else:
+                    logger.error("Playwright недоступен. Установите: pip install playwright && playwright install chromium")
+                    raise
 
             page_num = 1
             empty_pages_count = 0
             max_empty_pages = 3
+            blocked_count = 0
+            max_blocked = 2
 
             while page_num <= max_pages:
                 logger.info(f"Парсинг страницы {page_num}/{max_pages}...")
@@ -92,29 +116,59 @@ class OzonAPIParser:
                         empty_pages_count += 1
                         logger.warning(f"Страница {page_num} пустая ({empty_pages_count}/{max_empty_pages})")
 
+                        # Проверяем, не заблокировали ли нас
+                        if self._check_if_blocked():
+                            blocked_count += 1
+                            logger.warning(f"Обнаружена блокировка ({blocked_count}/{max_blocked})")
+
+                            # Пытаемся переключиться на Playwright
+                            if not self.use_playwright and HAS_PLAYWRIGHT and blocked_count >= max_blocked:
+                                logger.info("Переключаемся на Playwright из-за блокировок...")
+                                self.selenium_manager.close()
+                                self.playwright_manager.create_browser(headless=True)
+                                self.use_playwright = True
+                                blocked_count = 0  # Сбрасываем счетчик
+                                continue  # Пробуем текущую страницу снова
+
                         if empty_pages_count >= max_empty_pages:
                             logger.info("Достигнуто максимальное количество пустых страниц, завершаем")
                             break
                     else:
                         empty_pages_count = 0  # Сбрасываем счетчик
+                        blocked_count = 0  # Сбрасываем счетчик блокировок
                         self.products.extend(page_products)
                         logger.info(f"Страница {page_num}: найдено {len(page_products)} товаров")
 
                     # Задержка между страницами
                     delay = random.uniform(Settings.REQUEST_DELAY_MIN, Settings.REQUEST_DELAY_MAX)
+                    logger.debug(f"Задержка перед следующей страницей: {delay:.1f} сек")
                     time.sleep(delay)
 
                     page_num += 1
 
                 except Exception as e:
                     logger.error(f"Ошибка парсинга страницы {page_num}: {e}")
-                    break
+
+                    # Еще одна попытка переключиться на Playwright при ошибке
+                    if not self.use_playwright and HAS_PLAYWRIGHT and self.playwright_manager:
+                        logger.info("Пытаемся переключиться на Playwright после ошибки...")
+                        try:
+                            self.selenium_manager.close()
+                            self.playwright_manager.create_browser(headless=True)
+                            self.use_playwright = True
+                            continue  # Пробуем текущую страницу снова
+                        except:
+                            break
+                    else:
+                        break
 
             logger.info(f"Парсинг завершен. Всего собрано товаров: {len(self.products)}")
             return self.products
 
         finally:
             self.selenium_manager.close()
+            if self.playwright_manager:
+                self.playwright_manager.close()
 
     def _parse_page(self, page_num: int) -> List[ProductInfo]:
         """
@@ -129,13 +183,16 @@ class OzonAPIParser:
         # Формируем URL для API
         api_url = self._build_api_url(page_num)
 
+        # Выбираем менеджер в зависимости от флага
+        manager = self.playwright_manager if self.use_playwright else self.selenium_manager
+
         # Загружаем страницу
-        if not self.selenium_manager.navigate_to_url(api_url, wait_for_load=True):
+        if not manager.navigate_to_url(api_url, wait_for_load=True):
             logger.error(f"Не удалось загрузить страницу {page_num}")
             return []
 
         # Извлекаем JSON
-        json_content = self.selenium_manager.extract_json_from_page()
+        json_content = manager.extract_json_from_page()
         if not json_content:
             logger.error(f"Не удалось извлечь JSON со страницы {page_num}")
             return []
@@ -147,6 +204,16 @@ class OzonAPIParser:
         except json.JSONDecodeError as e:
             logger.error(f"Ошибка парсинга JSON: {e}")
             return []
+
+    def _check_if_blocked(self) -> bool:
+        """
+        Проверяет, заблокирован ли доступ.
+
+        Returns:
+            True если обнаружена блокировка
+        """
+        manager = self.playwright_manager if self.use_playwright else self.selenium_manager
+        return manager.is_page_blocked()
 
     def _build_api_url(self, page_num: int) -> str:
         """
