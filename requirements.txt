@@ -1,0 +1,9 @@
+# Selenium и Chrome driver
+selenium>=4.15.0
+undetected-chromedriver>=3.5.4
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Utilities
