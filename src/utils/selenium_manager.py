@@ -49,7 +49,7 @@ class SeleniumManager:
         Returns:
             Настроенный WebDriver
         """
-        options = self._create_chrome_options(headless)
+        options = self._create_chrome_options(headless, use_uc=HAS_UC)
 
         try:
             if HAS_UC:
@@ -78,12 +78,13 @@ class SeleniumManager:
             logger.error(f"Ошибка создания WebDriver: {e}")
             raise
 
-    def _create_chrome_options(self, headless: bool) -> ChromeOptions:
+    def _create_chrome_options(self, headless: bool, use_uc: bool = False) -> ChromeOptions:
         """
         Создает опции Chrome с анти-детект настройками.
 
         Args:
             headless: Headless режим
+            use_uc: Используется ли undetected-chromedriver
 
         Returns:
             Настроенные опции
@@ -98,20 +99,18 @@ class SeleniumManager:
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-notifications")
-
-        # Анти-детект опции
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(f"--user-agent={Settings.USER_AGENT}")
-
-        # Экспериментальные опции (объединяем excludeSwitches в одну опцию)
-        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_experimental_option("prefs", {
-            "profile.default_content_setting_values.notifications": 2
-        })
-
-        # Отключение логов
         options.add_argument("--log-level=3")
+
+        # Экспериментальные опции только для обычного ChromeDriver
+        # undetected-chromedriver управляет этими опциями сам
+        if not use_uc:
+            options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            options.add_experimental_option('useAutomationExtension', False)
+            options.add_experimental_option("prefs", {
+                "profile.default_content_setting_values.notifications": 2
+            })
 
         return options
 
