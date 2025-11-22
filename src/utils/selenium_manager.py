@@ -100,7 +100,8 @@ class SeleniumManager:
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument(f"--user-agent={Settings.USER_AGENT}")
+        # Используем мобильный User-Agent для обхода CloudFlare
+        options.add_argument(f"--user-agent={Settings.USER_AGENT_MOBILE}")
         options.add_argument("--log-level=3")
 
         # Экспериментальные опции только для обычного ChromeDriver
@@ -122,11 +123,11 @@ class SeleniumManager:
             driver: WebDriver
         """
         stealth(driver,
-            languages=["ru-RU", "ru"],
+            languages=["ru-RU", "ru", "en-US", "en"],
             vendor="Google Inc.",
-            platform="Win32",
-            webgl_vendor="Intel Inc.",
-            renderer="Intel Iris OpenGL Engine",
+            platform="Linux armv8l",  # Android platform
+            webgl_vendor="ARM",  # Mobile GPU
+            renderer="Mali-G77 MP11",  # Android GPU
             fix_hairline=True,
         )
 

@@ -19,11 +19,15 @@ class Settings:
     LOG_FILE = PROJECT_ROOT / 'parser.log'
 
     # API Ozon
-    OZON_API_BASE = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
+    # Используем мобильный API endpoint для обхода CloudFlare
+    OZON_API_BASE = "https://api.ozon.ru/composer-api.bx/page/json/v2"
     OZON_BASE_URL = "https://www.ozon.ru"
 
     # Параметры Chrome
     CHROME_VERSION = 142
+    # User-Agent для мобильного API (Android) - обходит CloudFlare лучше
+    USER_AGENT_MOBILE = 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36'
+    # Desktop User-Agent (запасной вариант)
     USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
     # Таймауты (в секундах)
