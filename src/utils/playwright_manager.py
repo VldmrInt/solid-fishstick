@@ -65,15 +65,24 @@ class PlaywrightManager:
             )
 
             # Создание контекста с реалистичными настройками
+            # Используем мобильный User-Agent для обхода CloudFlare
             self.context = self.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent=Settings.USER_AGENT,
+                viewport={'width': 412, 'height': 915},  # Android viewport
+                user_agent=Settings.USER_AGENT_MOBILE,
                 locale='ru-RU',
                 timezone_id='Europe/Moscow',
                 permissions=['geolocation'],
                 color_scheme='light',
+                device_scale_factor=2.625,  # Pixel density для Android
+                is_mobile=True,
+                has_touch=True,
                 extra_http_headers={
+                    'Accept': 'application/json, text/plain, */*',
                     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
                 }
             )
 
@@ -96,28 +105,57 @@ class PlaywrightManager:
         if not self.page:
             return
 
-        # Скрываем webdriver
+        # Комплексный анти-детект скрипт из best practices
         self.page.add_init_script("""
+            // Скрываем webdriver
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
-        """)
 
-        # Переопределяем permissions
-        self.page.add_init_script("""
+            // Эмулируем Chrome runtime
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+
+            // Добавляем реалистичные плагины
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [
+                    { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+                    { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+                    { name: 'Native Client', filename: 'internal-nacl-plugin' }
+                ]
+            });
+
+            // Эмулируем languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['ru-RU', 'ru', 'en-US', 'en']
+            });
+
+            // Переопределяем permissions
             const originalQuery = window.navigator.permissions.query;
             window.navigator.permissions.query = (parameters) => (
                 parameters.name === 'notifications' ?
                     Promise.resolve({ state: Notification.permission }) :
                     originalQuery(parameters)
             );
-        """)
 
-        # Добавляем плагины
-        self.page.add_init_script("""
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
+            // Маскируем headless mode
+            Object.defineProperty(navigator, 'platform', {
+                get: () => 'Linux armv8l'  // Android platform
             });
+
+            // Добавляем battery API для мобильных устройств
+            if (!navigator.getBattery) {
+                navigator.getBattery = () => Promise.resolve({
+                    charging: true,
+                    chargingTime: 0,
+                    dischargingTime: Infinity,
+                    level: 0.85
+                });
+            }
         """)
 
     def navigate_to_url(self, url: str, wait_for_load: bool = True, timeout: int = None) -> bool:
