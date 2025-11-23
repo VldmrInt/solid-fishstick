@@ -43,14 +43,15 @@ def setup_logger(name: str = 'ozon_parser', log_file: Path = None) -> logging.Lo
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.INFO)  # INFO уровень для консоли
 
-    # Настройка логгера
+    # Настройка корневого логгера для всех модулей
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, Settings.LOG_LEVEL))
+    root_logger.handlers.clear()
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    # Настройка основного логгера приложения
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, Settings.LOG_LEVEL))
-
-    # Удаляем старые handlers если есть
-    logger.handlers.clear()
-
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
 
     return logger
