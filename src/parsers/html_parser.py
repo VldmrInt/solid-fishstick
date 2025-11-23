@@ -167,68 +167,84 @@ class OzonHTMLParser:
         Returns:
             Список товаров на странице
         """
-        # Формируем URL
-        current_url = f"{self.seller_url}&page={page_num}" if page_num > 1 else self.seller_url
-
-        # Загружаем страницу
-        self.driver.get(current_url)
-        logger.debug(f"Открыта страница: {current_url}")
-
-        # Ждем загрузки
-        time.sleep(5)
-
-        # Проверяем на экран проверки CloudFlare
         try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), 'Пожалуйста, дождитесь окончания проверки')]")
-                )
-            )
-            logger.info("🔒 Обнаружен экран проверки CloudFlare, ждем...")
-            WebDriverWait(self.driver, 60).until_not(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), 'Пожалуйста, дождитесь окончания проверки')]")
-                )
-            )
-            logger.info("✅ Проверка CloudFlare завершена")
-        except TimeoutException:
-            logger.debug("Экран проверки не обнаружен, продолжаем")
+            # Формируем URL
+            current_url = f"{self.seller_url}&page={page_num}" if page_num > 1 else self.seller_url
 
-        # Проверяем на пустую страницу
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), 'ничего не нашлось')]")
-                )
-            )
-            logger.info(f"Страница {page_num} пустая (нет товаров)")
-            return []
-        except TimeoutException:
-            pass  # Страница с товарами
+            # Загружаем страницу
+            logger.info(f"📄 Загрузка страницы магазина...")
+            self.driver.get(current_url)
+            logger.info(f"✅ Страница загружена: {current_url}")
 
-        # Скроллим страницу для загрузки всех товаров
-        self._scroll_page()
+            # Ждем загрузки
+            time.sleep(5)
 
-        # Получаем HTML
-        page_source = self.driver.page_source
-
-        # Сохраняем HTML первой страницы для отладки
-        if page_num == 1:
-            debug_file = Settings.PROJECT_ROOT / f'debug_html_page_{page_num}.html'
+            # Проверяем на экран проверки CloudFlare
             try:
-                with open(debug_file, 'w', encoding='utf-8') as f:
-                    f.write(page_source)
-                logger.info(f"💾 HTML первой страницы сохранен в {debug_file} для отладки")
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//*[contains(text(), 'Пожалуйста, дождитесь окончания проверки')]")
+                    )
+                )
+                logger.info("🔒 Обнаружен экран проверки CloudFlare, ждем...")
+                WebDriverWait(self.driver, 60).until_not(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//*[contains(text(), 'Пожалуйста, дождитесь окончания проверки')]")
+                    )
+                )
+                logger.info("✅ Проверка CloudFlare завершена")
+            except TimeoutException:
+                logger.debug("Экран проверки не обнаружен, продолжаем")
+
+            # Проверяем на пустую страницу
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//*[contains(text(), 'ничего не нашлось')]")
+                    )
+                )
+                logger.info(f"Страница {page_num} пустая (нет товаров)")
+                return []
+            except TimeoutException:
+                pass  # Страница с товарами
+
+            # Скроллим страницу для загрузки всех товаров
+            logger.info("🔄 Начинаем скролл страницы...")
+            try:
+                self._scroll_page()
+                logger.info("✅ Скролл завершен")
             except Exception as e:
-                logger.warning(f"Не удалось сохранить debug HTML: {e}")
+                logger.error(f"❌ Ошибка при скролле: {type(e).__name__}: {e}", exc_info=True)
+                # Продолжаем парсинг с тем что есть
 
-        # Парсим HTML
-        if HAS_BS4:
-            products = self._parse_html_with_bs4(page_source)
-        else:
-            products = self._parse_html_fallback(page_source)
+            # Получаем HTML
+            logger.info("📥 Получение HTML страницы...")
+            page_source = self.driver.page_source
+            logger.info(f"✅ HTML получен, размер: {len(page_source)} байт")
 
-        return products
+            # Сохраняем HTML первой страницы для отладки
+            if page_num == 1:
+                debug_file = Settings.PROJECT_ROOT / f'debug_html_page_{page_num}.html'
+                try:
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        f.write(page_source)
+                    logger.info(f"💾 HTML первой страницы сохранен в {debug_file} для отладки")
+                except Exception as e:
+                    logger.warning(f"Не удалось сохранить debug HTML: {e}")
+
+            # Парсим HTML
+            logger.info("🔍 Начинаем парсинг HTML...")
+            if HAS_BS4:
+                products = self._parse_html_with_bs4(page_source)
+            else:
+                products = self._parse_html_fallback(page_source)
+
+            logger.info(f"✅ Парсинг завершен, найдено товаров: {len(products)}")
+            return products
+
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка в _parse_page: {type(e).__name__}: {e}", exc_info=True)
+            return []
 
     def _scroll_page(self):
         """
@@ -237,75 +253,89 @@ class OzonHTMLParser:
         Продолжает скролл пока появляются новые товары.
         Останавливается если товары не появляются определенное время (настраивается в config.json).
         """
-        # Загружаем настройки скролла из config.json
-        scroll_config = Settings.get_scroll_settings()
+        try:
+            # Загружаем настройки скролла из config.json
+            logger.info("⚙️ Загрузка настроек скролла из config.json...")
+            scroll_config = Settings.get_scroll_settings()
 
-        scroll_pause = scroll_config['scroll_pause']
-        scroll_step_min = scroll_config['scroll_step_min']
-        scroll_step_max = scroll_config['scroll_step_max']
-        max_wait_seconds = scroll_config['max_wait_seconds']
-        max_scroll_attempts = scroll_config['max_scroll_attempts']
+            scroll_pause = scroll_config['scroll_pause']
+            scroll_step_min = scroll_config['scroll_step_min']
+            scroll_step_max = scroll_config['scroll_step_max']
+            max_wait_seconds = scroll_config['max_wait_seconds']
+            max_scroll_attempts = scroll_config['max_scroll_attempts']
 
-        logger.info("🔄 Начинаем бесконечный скролл для загрузки всех товаров...")
-        logger.info(f"   Настройки: пауза {scroll_pause}с, шаг {scroll_step_min}-{scroll_step_max}px, таймаут {max_wait_seconds}с")
+            logger.info("🔄 Начинаем бесконечный скролл для загрузки всех товаров...")
+            logger.info(f"   Настройки: пауза {scroll_pause}с, шаг {scroll_step_min}-{scroll_step_max}px, таймаут {max_wait_seconds}с")
 
-        last_product_count = 0
-        last_change_time = time.time()
-        scroll_attempts = 0
+            last_product_count = 0
+            last_change_time = time.time()
+            scroll_attempts = 0
 
-        logger.info("   Начальный подсчет товаров на странице...")
+            logger.info("   Начальный подсчет товаров на странице...")
 
-        while scroll_attempts < max_scroll_attempts:
-            # Скроллим вниз
-            scroll_step = random.randint(scroll_step_min, scroll_step_max)
-            self.driver.execute_script(f"window.scrollBy(0, {scroll_step});")
+            while scroll_attempts < max_scroll_attempts:
+                try:
+                    # Скроллим вниз
+                    scroll_step = random.randint(scroll_step_min, scroll_step_max)
+                    self.driver.execute_script(f"window.scrollBy(0, {scroll_step});")
 
-            # Пауза для загрузки контента (настраивается в config.json)
-            time.sleep(scroll_pause)
+                    # Пауза для загрузки контента (настраивается в config.json)
+                    time.sleep(scroll_pause)
 
-            # Считаем текущее количество товаров на странице
-            # Используем специфичные селекторы для Ozon
-            current_product_count = self.driver.execute_script("""
-                // Считаем ссылки на товары Ozon
-                const productLinks = document.querySelectorAll('a[href*="/product/"]');
+                    # Считаем текущее количество товаров на странице
+                    # Используем специфичные селекторы для Ozon
+                    current_product_count = self.driver.execute_script("""
+                        // Считаем ссылки на товары Ozon
+                        const productLinks = document.querySelectorAll('a[href*="/product/"]');
 
-                // Фильтруем уникальные товары по SKU в URL
-                const uniqueProducts = new Set();
-                productLinks.forEach(link => {
-                    const match = link.href.match(/\\/product\\/[^\\/-]+-(\\d+)/);
-                    if (match && match[1]) {
-                        uniqueProducts.add(match[1]);
-                    }
-                });
+                        // Фильтруем уникальные товары по SKU в URL
+                        const uniqueProducts = new Set();
+                        productLinks.forEach(link => {
+                            const match = link.href.match(/\\/product\\/[^\\/-]+-(\\d+)/);
+                            if (match && match[1]) {
+                                uniqueProducts.add(match[1]);
+                            }
+                        });
 
-                return uniqueProducts.size;
-            """)
+                        return uniqueProducts.size;
+                    """)
 
-            # Проверяем появились ли новые товары
-            current_time = time.time()
-            elapsed_since_change = current_time - last_change_time
+                    # Проверяем появились ли новые товары
+                    current_time = time.time()
+                    elapsed_since_change = current_time - last_change_time
 
-            if current_product_count > last_product_count:
-                logger.info(f"   Загружено товаров: {current_product_count} (+{current_product_count - last_product_count})")
-                last_product_count = current_product_count
-                last_change_time = current_time  # Обновляем время последнего изменения
-            else:
-                # Если товары не появляются больше max_wait_seconds секунд
-                if elapsed_since_change >= max_wait_seconds:
-                    logger.info(f"✅ Скролл завершен: {max_wait_seconds} секунд без новых товаров")
-                    logger.info(f"   Всего загружено уникальных товаров: {current_product_count}")
-                    break
+                    if current_product_count > last_product_count:
+                        logger.info(f"   Загружено товаров: {current_product_count} (+{current_product_count - last_product_count})")
+                        last_product_count = current_product_count
+                        last_change_time = current_time  # Обновляем время последнего изменения
+                    else:
+                        # Если товары не появляются больше max_wait_seconds секунд
+                        if elapsed_since_change >= max_wait_seconds:
+                            logger.info(f"✅ Скролл завершен: {max_wait_seconds} секунд без новых товаров")
+                            logger.info(f"   Всего загружено уникальных товаров: {current_product_count}")
+                            break
 
-            scroll_attempts += 1
+                    scroll_attempts += 1
 
-            # Логируем каждые 20 попыток для отслеживания прогресса
-            if scroll_attempts % 20 == 0:
-                logger.info(f"   Скролл #{scroll_attempts}: товаров {current_product_count}, времени без изменений: {elapsed_since_change:.1f}с")
+                    # Логируем каждые 20 попыток для отслеживания прогресса
+                    if scroll_attempts % 20 == 0:
+                        logger.info(f"   Скролл #{scroll_attempts}: товаров {current_product_count}, времени без изменений: {elapsed_since_change:.1f}с")
 
-        if scroll_attempts >= max_scroll_attempts:
-            logger.warning(f"⚠️ Достигнут лимит попыток скролла ({max_scroll_attempts})")
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка во время скролла (попытка {scroll_attempts}): {type(e).__name__}: {e}")
+                    # Продолжаем скролл несмотря на ошибку
+                    scroll_attempts += 1
+                    if scroll_attempts >= max_scroll_attempts:
+                        break
 
-        logger.info(f"Скролл завершен за {scroll_attempts} попыток, найдено {last_product_count} товаров")
+            if scroll_attempts >= max_scroll_attempts:
+                logger.warning(f"⚠️ Достигнут лимит попыток скролла ({max_scroll_attempts})")
+
+            logger.info(f"📊 Скролл завершен за {scroll_attempts} попыток, найдено {last_product_count} товаров")
+
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка в _scroll_page: {type(e).__name__}: {e}", exc_info=True)
+            raise
 
     def _parse_html_with_bs4(self, html: str) -> List[ProductInfo]:
         """Парсит HTML с помощью BeautifulSoup"""
