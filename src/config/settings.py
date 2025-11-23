@@ -106,6 +106,39 @@ class Settings:
         return None
 
     @classmethod
+    def get_scroll_settings(cls) -> dict:
+        """
+        Получает настройки скролла из config.json
+
+        Returns:
+            dict с настройками скролла (с дефолтными значениями если не указаны)
+        """
+        try:
+            config = cls.load_config()
+            scroll_settings = config.get('scroll_settings', {})
+
+            # Дефолтные значения
+            defaults = {
+                'scroll_pause': 2.0,  # Пауза между скроллами (секунды)
+                'scroll_step_min': 500,  # Минимальный шаг скролла (пиксели)
+                'scroll_step_max': 800,  # Максимальный шаг скролла (пиксели)
+                'max_wait_seconds': 10,  # Время ожидания без новых товаров (секунды)
+                'max_scroll_attempts': 1000  # Максимальное количество попыток скролла
+            }
+
+            # Объединяем с настройками из config
+            return {**defaults, **scroll_settings}
+        except Exception:
+            # Если не удалось загрузить, возвращаем дефолтные значения
+            return {
+                'scroll_pause': 2.0,
+                'scroll_step_min': 500,
+                'scroll_step_max': 800,
+                'max_wait_seconds': 10,
+                'max_scroll_attempts': 1000
+            }
+
+    @classmethod
     def ensure_directories(cls):
         """Создает необходимые директории"""
         cls.ARCHIVE_DIR.mkdir(exist_ok=True)

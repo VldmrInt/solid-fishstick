@@ -235,25 +235,33 @@ class OzonHTMLParser:
         Скроллит бесконечную ленту Ozon до конца.
 
         Продолжает скролл пока появляются новые товары.
-        Останавливается если товары не появляются 10 секунд.
+        Останавливается если товары не появляются определенное время (настраивается в config.json).
         """
+        # Загружаем настройки скролла из config.json
+        scroll_config = Settings.get_scroll_settings()
+
+        scroll_pause = scroll_config['scroll_pause']
+        scroll_step_min = scroll_config['scroll_step_min']
+        scroll_step_max = scroll_config['scroll_step_max']
+        max_wait_seconds = scroll_config['max_wait_seconds']
+        max_scroll_attempts = scroll_config['max_scroll_attempts']
+
         logger.info("🔄 Начинаем бесконечный скролл для загрузки всех товаров...")
+        logger.info(f"   Настройки: пауза {scroll_pause}с, шаг {scroll_step_min}-{scroll_step_max}px, таймаут {max_wait_seconds}с")
 
         last_product_count = 0
         last_change_time = time.time()
-        max_wait_seconds = 10  # Ждем 10 секунд без новых товаров
         scroll_attempts = 0
-        max_scroll_attempts = 1000  # Увеличен лимит для больших магазинов
 
         logger.info("   Начальный подсчет товаров на странице...")
 
         while scroll_attempts < max_scroll_attempts:
             # Скроллим вниз
-            scroll_step = random.randint(800, 1200)
+            scroll_step = random.randint(scroll_step_min, scroll_step_max)
             self.driver.execute_script(f"window.scrollBy(0, {scroll_step});")
 
-            # Небольшая пауза для загрузки контента
-            time.sleep(0.8)
+            # Пауза для загрузки контента (настраивается в config.json)
+            time.sleep(scroll_pause)
 
             # Считаем текущее количество товаров на странице
             # Используем специфичные селекторы для Ozon
