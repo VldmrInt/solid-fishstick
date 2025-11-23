@@ -240,10 +240,12 @@ class OzonHTMLParser:
         logger.info("🔄 Начинаем бесконечный скролл для загрузки всех товаров...")
 
         last_product_count = 0
-        no_new_products_time = 0
-        max_wait_time = 10  # Ждем 10 секунд без новых товаров
+        last_change_time = time.time()
+        max_wait_seconds = 10  # Ждем 10 секунд без новых товаров
         scroll_attempts = 0
-        max_scroll_attempts = 500  # Защита от бесконечного цикла
+        max_scroll_attempts = 1000  # Увеличен лимит для больших магазинов
+
+        logger.info("   Начальный подсчет товаров на странице...")
 
         while scroll_attempts < max_scroll_attempts:
             # Скроллим вниз
@@ -251,47 +253,51 @@ class OzonHTMLParser:
             self.driver.execute_script(f"window.scrollBy(0, {scroll_step});")
 
             # Небольшая пауза для загрузки контента
-            time.sleep(random.uniform(0.5, 1.0))
+            time.sleep(0.8)
 
             # Считаем текущее количество товаров на странице
-            # Используем универсальный селектор для карточек товаров
+            # Используем специфичные селекторы для Ozon
             current_product_count = self.driver.execute_script("""
-                // Считаем карточки товаров (различные возможные селекторы)
-                const selectors = [
-                    'a[href*="/product/"]',
-                    'div[class*="tile"]',
-                    'div[class*="card"]',
-                    'article'
-                ];
+                // Считаем ссылки на товары Ozon
+                const productLinks = document.querySelectorAll('a[href*="/product/"]');
 
-                let maxCount = 0;
-                for (const selector of selectors) {
-                    const count = document.querySelectorAll(selector).length;
-                    if (count > maxCount) maxCount = count;
-                }
-                return maxCount;
+                // Фильтруем уникальные товары по SKU в URL
+                const uniqueProducts = new Set();
+                productLinks.forEach(link => {
+                    const match = link.href.match(/\\/product\\/[^\\/-]+-(\\d+)/);
+                    if (match && match[1]) {
+                        uniqueProducts.add(match[1]);
+                    }
+                });
+
+                return uniqueProducts.size;
             """)
 
             # Проверяем появились ли новые товары
+            current_time = time.time()
+            elapsed_since_change = current_time - last_change_time
+
             if current_product_count > last_product_count:
                 logger.info(f"   Загружено товаров: {current_product_count} (+{current_product_count - last_product_count})")
                 last_product_count = current_product_count
-                no_new_products_time = 0  # Сбрасываем таймер
+                last_change_time = current_time  # Обновляем время последнего изменения
             else:
-                no_new_products_time += 1
-
-                # Если товары не появляются, ждем дополнительно
-                if no_new_products_time >= max_wait_time:
-                    logger.info(f"✅ Скролл завершен: {max_wait_time} секунд без новых товаров")
-                    logger.info(f"   Всего загружено карточек: {current_product_count}")
+                # Если товары не появляются больше max_wait_seconds секунд
+                if elapsed_since_change >= max_wait_seconds:
+                    logger.info(f"✅ Скролл завершен: {max_wait_seconds} секунд без новых товаров")
+                    logger.info(f"   Всего загружено уникальных товаров: {current_product_count}")
                     break
 
             scroll_attempts += 1
 
+            # Логируем каждые 20 попыток для отслеживания прогресса
+            if scroll_attempts % 20 == 0:
+                logger.info(f"   Скролл #{scroll_attempts}: товаров {current_product_count}, времени без изменений: {elapsed_since_change:.1f}с")
+
         if scroll_attempts >= max_scroll_attempts:
             logger.warning(f"⚠️ Достигнут лимит попыток скролла ({max_scroll_attempts})")
 
-        logger.debug(f"Скролл завершен за {scroll_attempts} попыток")
+        logger.info(f"Скролл завершен за {scroll_attempts} попыток, найдено {last_product_count} товаров")
 
     def _parse_html_with_bs4(self, html: str) -> List[ProductInfo]:
         """Парсит HTML с помощью BeautifulSoup"""
