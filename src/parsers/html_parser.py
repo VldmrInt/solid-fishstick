@@ -120,10 +120,13 @@ class OzonHTMLParser:
 
     def parse_all_pages(self, max_pages: int = 100) -> List[ProductInfo]:
         """
-        Парсит все страницы магазина.
+        Парсит магазин с бесконечной лентой через скролл.
+
+        Ozon использует бесконечную ленту товаров, поэтому парсим
+        только первую страницу со скроллом до конца.
 
         Args:
-            max_pages: Максимальное количество страниц
+            max_pages: Игнорируется (оставлен для совместимости)
 
         Returns:
             Список товаров
@@ -131,42 +134,20 @@ class OzonHTMLParser:
         logger.info(f"Начало HTML парсинга магазина: {self.seller_url}")
         logger.info(f"ID продавца: {self.seller_id}")
         logger.info(f"Режим: {'headless' if self.headless else 'с видимым окном'}")
+        logger.info("ℹ️  Ozon использует бесконечную ленту - парсим одну страницу со скроллом")
 
         try:
             self.driver = self._create_driver()
 
-            page_num = 1
-            empty_pages_count = 0
-            max_empty_pages = 3
+            # Парсим только первую страницу с бесконечным скроллом
+            logger.info(f"📄 Загрузка страницы магазина...")
+            page_products = self._parse_page(1)
 
-            while page_num <= max_pages:
-                logger.info(f"📄 Парсинг страницы {page_num}/{max_pages}...")
-
-                try:
-                    page_products = self._parse_page(page_num)
-
-                    if not page_products:
-                        empty_pages_count += 1
-                        logger.warning(f"Страница {page_num} пустая ({empty_pages_count}/{max_empty_pages})")
-
-                        if empty_pages_count >= max_empty_pages:
-                            logger.info("Достигнуто максимальное количество пустых страниц, завершаем")
-                            break
-                    else:
-                        empty_pages_count = 0
-                        self.products.extend(page_products)
-                        logger.info(f"✅ Страница {page_num}: найдено {len(page_products)} товаров")
-
-                    # Задержка между страницами
-                    delay = random.uniform(Settings.REQUEST_DELAY_MIN, Settings.REQUEST_DELAY_MAX)
-                    logger.debug(f"Задержка перед следующей страницей: {delay:.1f} сек")
-                    time.sleep(delay)
-
-                    page_num += 1
-
-                except Exception as e:
-                    logger.error(f"Ошибка парсинга страницы {page_num}: {e}")
-                    break
+            if page_products:
+                self.products.extend(page_products)
+                logger.info(f"✅ Найдено товаров: {len(page_products)}")
+            else:
+                logger.warning("Товары не найдены")
 
             logger.info(f"HTML парсинг завершен. Всего собрано товаров: {len(self.products)}")
             return self.products
@@ -250,28 +231,65 @@ class OzonHTMLParser:
         return products
 
     def _scroll_page(self):
-        """Скроллит страницу для загрузки всех товаров"""
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
-        no_change_count = 0
-        max_no_change = 5
-        max_attempts = 20
+        """
+        Скроллит бесконечную ленту Ozon до конца.
+
+        Продолжает скролл пока появляются новые товары.
+        Останавливается если товары не появляются 10 секунд.
+        """
+        logger.info("🔄 Начинаем бесконечный скролл для загрузки всех товаров...")
+
+        last_product_count = 0
+        no_new_products_time = 0
+        max_wait_time = 10  # Ждем 10 секунд без новых товаров
         scroll_attempts = 0
+        max_scroll_attempts = 500  # Защита от бесконечного цикла
 
-        while scroll_attempts < max_attempts:
-            scroll_step = random.randint(500, 1500)
+        while scroll_attempts < max_scroll_attempts:
+            # Скроллим вниз
+            scroll_step = random.randint(800, 1200)
             self.driver.execute_script(f"window.scrollBy(0, {scroll_step});")
-            time.sleep(random.uniform(1, 2))
 
-            new_height = self.driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                no_change_count += 1
-                if no_change_count >= max_no_change:
-                    break
+            # Небольшая пауза для загрузки контента
+            time.sleep(random.uniform(0.5, 1.0))
+
+            # Считаем текущее количество товаров на странице
+            # Используем универсальный селектор для карточек товаров
+            current_product_count = self.driver.execute_script("""
+                // Считаем карточки товаров (различные возможные селекторы)
+                const selectors = [
+                    'a[href*="/product/"]',
+                    'div[class*="tile"]',
+                    'div[class*="card"]',
+                    'article'
+                ];
+
+                let maxCount = 0;
+                for (const selector of selectors) {
+                    const count = document.querySelectorAll(selector).length;
+                    if (count > maxCount) maxCount = count;
+                }
+                return maxCount;
+            """)
+
+            # Проверяем появились ли новые товары
+            if current_product_count > last_product_count:
+                logger.info(f"   Загружено товаров: {current_product_count} (+{current_product_count - last_product_count})")
+                last_product_count = current_product_count
+                no_new_products_time = 0  # Сбрасываем таймер
             else:
-                no_change_count = 0
+                no_new_products_time += 1
 
-            last_height = new_height
+                # Если товары не появляются, ждем дополнительно
+                if no_new_products_time >= max_wait_time:
+                    logger.info(f"✅ Скролл завершен: {max_wait_time} секунд без новых товаров")
+                    logger.info(f"   Всего загружено карточек: {current_product_count}")
+                    break
+
             scroll_attempts += 1
+
+        if scroll_attempts >= max_scroll_attempts:
+            logger.warning(f"⚠️ Достигнут лимит попыток скролла ({max_scroll_attempts})")
 
         logger.debug(f"Скролл завершен за {scroll_attempts} попыток")
 
@@ -279,6 +297,14 @@ class OzonHTMLParser:
         """Парсит HTML с помощью BeautifulSoup"""
         soup = BeautifulSoup(html, 'html.parser')
         items = {}
+
+        # Исключаем блок "Возможно, вам понравится"
+        recommendations_blocks = soup.find_all('div', class_=lambda x: x and 'im8_24' in x)
+        for block in recommendations_blocks:
+            # Проверяем, есть ли текст "Возможно, вам понравится"
+            if block.find(string=lambda text: text and 'Возможно, вам понравится' in text):
+                logger.info("🚫 Исключаем блок 'Возможно, вам понравится'")
+                block.decompose()  # Удаляем блок из DOM
 
         # Поиск по ссылкам на товары
         for a in soup.find_all('a', href=True):
@@ -289,35 +315,49 @@ class OzonHTMLParser:
 
             pid = m.group(1)
 
-            # Название товара
-            name = self._clean_text(a.text)
-            if not name:
-                img = a.find('img')
-                if img and 'alt' in img.attrs:
-                    name = self._clean_text(img['alt'])
+            # Проверяем, не находится ли ссылка в блоке рекомендаций
+            # (дополнительная защита если блок не удалился)
+            parent_text = ''
+            check_parent = a.parent
+            for _ in range(5):
+                if check_parent:
+                    parent_text = check_parent.get_text(separator=' ', strip=True)
+                    if 'Возможно, вам понравится' in parent_text:
+                        # Пропускаем этот товар
+                        break
+                    check_parent = check_parent.parent
+            else:
+                # Товар не в блоке рекомендаций, парсим его
 
-            # Поиск цен в родителях
-            prices = []
-            container = a.parent
-            for _ in range(4):
-                if container:
-                    text = container.get_text(separator=' ', strip=True)
-                    found_prices = self.RE_PRICE.findall(text)
-                    for p in found_prices:
-                        cleaned_p = self._clean_text(p)
-                        if cleaned_p and cleaned_p not in prices:
-                            prices.append(cleaned_p)
-                    container = container.parent
+                # Название товара
+                name = self._clean_text(a.text)
+                if not name:
+                    img = a.find('img')
+                    if img and 'alt' in img.attrs:
+                        name = self._clean_text(img['alt'])
 
-            # Полная ссылка на товар
-            full_link = f"https://www.ozon.ru{href}" if not href.startswith('http') else href
+                # Поиск цен в родителях
+                prices = []
+                container = a.parent
+                for _ in range(4):
+                    if container:
+                        text = container.get_text(separator=' ', strip=True)
+                        found_prices = self.RE_PRICE.findall(text)
+                        for p in found_prices:
+                            cleaned_p = self._clean_text(p)
+                            if cleaned_p and cleaned_p not in prices:
+                                prices.append(cleaned_p)
+                        container = container.parent
 
-            items[pid] = {
-                'name': name,
-                'sku': pid,
-                'prices': prices[:2],
-                'link': full_link
-            }
+                # Полная ссылка на товар
+                full_link = f"https://www.ozon.ru{href}" if not href.startswith('http') else href
+
+                items[pid] = {
+                    'name': name,
+                    'sku': pid,
+                    'prices': prices[:2],
+                    'link': full_link
+                }
 
         # Конвертируем в ProductInfo
         products = []
@@ -332,11 +372,24 @@ class OzonHTMLParser:
             )
             products.append(product)
 
-        logger.debug(f"BeautifulSoup: найдено {len(products)} товаров")
+        logger.debug(f"BeautifulSoup: найдено {len(products)} товаров (исключая рекомендации)")
         return products
 
     def _parse_html_fallback(self, html: str) -> List[ProductInfo]:
         """Парсит HTML с помощью регулярных выражений (fallback)"""
+
+        # Удаляем блок "Возможно, вам понравится" из HTML
+        # Ищем начало блока
+        recommendation_start = html.find('Возможно, вам понравится')
+        if recommendation_start != -1:
+            logger.info("🚫 Исключаем блок 'Возможно, вам понравится' (fallback)")
+            # Ищем начало блока (за 500 символов до текста)
+            block_start = max(0, recommendation_start - 500)
+            # Ищем конец блока (примерно 10000 символов после текста, чтобы захватить все товары)
+            block_end = min(len(html), recommendation_start + 10000)
+            # Вырезаем блок
+            html = html[:block_start] + html[block_end:]
+
         items = {}
 
         for m in self.RE_PRODUCT_ID.finditer(html):
@@ -379,7 +432,7 @@ class OzonHTMLParser:
             )
             products.append(product)
 
-        logger.debug(f"Fallback: найдено {len(products)} товаров")
+        logger.debug(f"Fallback: найдено {len(products)} товаров (исключая рекомендации)")
         return products
 
     @staticmethod
