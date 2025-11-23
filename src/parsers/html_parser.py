@@ -231,6 +231,16 @@ class OzonHTMLParser:
         # Получаем HTML
         page_source = self.driver.page_source
 
+        # Сохраняем HTML первой страницы для отладки
+        if page_num == 1:
+            debug_file = Settings.PROJECT_ROOT / f'debug_html_page_{page_num}.html'
+            try:
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(page_source)
+                logger.info(f"💾 HTML первой страницы сохранен в {debug_file} для отладки")
+            except Exception as e:
+                logger.warning(f"Не удалось сохранить debug HTML: {e}")
+
         # Парсим HTML
         if HAS_BS4:
             products = self._parse_html_with_bs4(page_source)

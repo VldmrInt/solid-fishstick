@@ -42,15 +42,9 @@ def main():
         help='Метод парсинга: api (через API endpoints) или html (прямой HTML, рекомендуется) (по умолчанию: html)'
     )
     parser.add_argument(
-        '--headless',
-        action='store_true',
-        default=True,
-        help='Запускать браузер в headless режиме (по умолчанию: True)'
-    )
-    parser.add_argument(
         '--no-headless',
-        dest='headless',
-        action='store_false',
+        action='store_true',
+        default=False,
         help='Открыть видимое окно браузера (помогает обойти защиту)'
     )
     parser.add_argument(
@@ -96,8 +90,9 @@ def main():
         logger.info(f"Метод парсинга: {args.method.upper()}")
 
         if args.method == 'html':
-            logger.info(f"Режим браузера: {'headless' if args.headless else 'с видимым окном'}")
-            parser = OzonHTMLParser(seller_url, headless=args.headless)
+            headless = not args.no_headless  # Если --no-headless, то headless=False
+            logger.info(f"Режим браузера: {'headless' if headless else 'с видимым окном'}")
+            parser = OzonHTMLParser(seller_url, headless=headless)
         else:  # api
             parser = OzonAPIParser(seller_url)
 

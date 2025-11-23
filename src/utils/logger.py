@@ -41,7 +41,7 @@ def setup_logger(name: str = 'ozon_parser', log_file: Path = None) -> logging.Lo
     # Консольный handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.DEBUG)  # Включаем DEBUG для консоли
+    console_handler.setLevel(logging.INFO)  # INFO уровень для консоли
 
     # Настройка логгера
     logger = logging.getLogger(name)
