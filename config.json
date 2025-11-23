@@ -1,3 +1,10 @@
 {
-  "seller_url": "https://www.ozon.ru/seller/modelnaya-lavka-2860977/?miniapp=seller_2860977"
+  "seller_url": "https://www.ozon.ru/seller/modelnaya-lavka-2860977/?miniapp=seller_2860977",
+  "scroll_settings": {
+    "scroll_pause": 2.0,
+    "scroll_step_min": 500,
+    "scroll_step_max": 800,
+    "max_wait_seconds": 10,
+    "max_scroll_attempts": 1000
+  }
 }
